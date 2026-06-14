@@ -1,13 +1,14 @@
-// api/search.js – uses reliable public SearXNG instances
+// api/search.js – uses SearXNG instances that allow Vercel requests
 export default async function handler(req, res) {
   const { q } = req.query;
   if (!q) return res.status(400).json({ error: 'Missing ?q=' });
 
-  // Try these instances in order (you can add more from https://searx.space)
+  // Instances that are known to work from serverless platforms (May 2025)
   const instances = [
-    'https://search.sapti.me',
-    'https://searx.tiekoetter.com',
-    'https://searx.be'
+    'https://search.bus-hit.me',   // currently working
+    'https://search.inetol.net',   // good uptime, allows cloud IPs
+    'https://searx.rocks',         // usually friendly
+    'https://search.sapti.me'      // fallback
   ];
 
   for (const baseUrl of instances) {
@@ -21,16 +22,12 @@ export default async function handler(req, res) {
       });
 
       if (!response.ok) {
-        throw new Error(`Server responded with status ${response.status}`);
+        throw new Error(`Status ${response.status}`);
       }
 
       const data = await response.json();
+      if (!data.results) continue;
 
-      if (!data.results) {
-        throw new Error('No results array in response');
-      }
-
-      // Split results by category
       const web = [];
       const videos = [];
       const images = [];
@@ -59,17 +56,14 @@ export default async function handler(req, res) {
         }
       });
 
-      // If we got at least some results, return them
       if (web.length > 0 || videos.length > 0 || images.length > 0) {
         return res.status(200).json({ results: { web, videos, images } });
       }
     } catch (err) {
-      // If this is the last instance, return the error so you can see it
+      // last instance → report the error
       if (baseUrl === instances[instances.length - 1]) {
         return res.status(500).json({ error: `All instances failed. Last error: ${err.message}` });
       }
-      // Otherwise, try the next instance
-      continue;
     }
   }
 
