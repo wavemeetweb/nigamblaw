@@ -3,7 +3,7 @@ export default async function handler(req, res) {
   const { q } = req.query;
   if (!q) return res.status(400).json({ error: 'Missing ?q=' });
 
-  // List of public SearXNG servers (you can add more from https://searx.space)
+  // Try these instances in order (you can add more from https://searx.space)
   const instances = [
     'https://search.sapti.me',
     'https://searx.tiekoetter.com',
@@ -14,11 +14,21 @@ export default async function handler(req, res) {
     try {
       const searxUrl = `${baseUrl}/search?q=${encodeURIComponent(q)}&format=json&categories=general,videos,images&language=auto`;
       const response = await fetch(searxUrl, {
-        headers: { 'User-Agent': 'CyberBrowser/1.0' }
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'application/json'
+        }
       });
+
+      if (!response.ok) {
+        throw new Error(`Server responded with status ${response.status}`);
+      }
+
       const data = await response.json();
 
-      if (!data.results) continue;   // some instances may not return results for certain queries
+      if (!data.results) {
+        throw new Error('No results array in response');
+      }
 
       // Split results by category
       const web = [];
@@ -54,11 +64,14 @@ export default async function handler(req, res) {
         return res.status(200).json({ results: { web, videos, images } });
       }
     } catch (err) {
-      console.error(`Instance ${baseUrl} failed:`, err.message);
-      // continue to next instance
+      // If this is the last instance, return the error so you can see it
+      if (baseUrl === instances[instances.length - 1]) {
+        return res.status(500).json({ error: `All instances failed. Last error: ${err.message}` });
+      }
+      // Otherwise, try the next instance
+      continue;
     }
   }
 
-  // All instances failed
   return res.status(500).json({ error: 'Search failed – no SearXNG instance available' });
 }
